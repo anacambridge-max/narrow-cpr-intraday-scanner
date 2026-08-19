@@ -20,6 +20,9 @@ export type ScannerRow = {
   trend: "Bullish" | "Bearish" | "Neutral";
   score: number;
   setup: "Breakout" | "Breakdown" | "Expansion";
+  pdh: number;
+  pdl: number;
+  close: number;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -31,7 +34,7 @@ export function scoreScannerRow(input: ScannerInput): ScannerRow | null {
   if (!isNarrowCPR(cpr.widthPct)) return null;
 
   const atrPct = input.atrPct ?? 0;
-  const relativeVolume = input.relativeVolume ?? 0;
+  const relativeVolume = input.relativeVolume ?? 1;
   const trend = input.trend ?? "Neutral";
 
   const cprScore = clamp((0.7 - cpr.widthPct) / 0.7 * 35, 0, 35);
@@ -54,6 +57,9 @@ export function scoreScannerRow(input: ScannerInput): ScannerRow | null {
     trend,
     score,
     setup,
+    pdh: input.candle.high,
+    pdl: input.candle.low,
+    close: input.candle.close,
   };
 }
 
