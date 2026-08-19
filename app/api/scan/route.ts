@@ -14,7 +14,6 @@ type Instrument = {
 };
 
 type Quote = {
-  instrument_token?: string;
   prev_ohlc?: { open: number; high: number; low: number; close: number; volume: number };
 };
 
@@ -121,8 +120,6 @@ export async function GET() {
     const universe = getFnoUniverse(instruments);
     if (!universe.length) throw new Error("No current NSE equity F&O underlyings found in Upstox instrument master.");
 
-    // Important: CPR must be calculated from the EQUITY underlying, not the futures contract.
-    // Upstox's V3 OHLC response uses prev_ohlc for the previous session.
     const equityKeys = universe.map((x) => x.equityKey).slice(0, 500);
     const quote = await upstox(
       `/v3/market-quote/ohlc?interval=1d&instrument_key=${encodeURIComponent(equityKeys.join(","))}`,
@@ -130,10 +127,11 @@ export async function GET() {
     const quoteData: Record<string, Quote> = quote.data || {};
     const byKey = new Map(universe.map((x) => [x.equityKey, x]));
 
-    const allCandidates = Object.values(quoteData)
-      .map((q) => {
-        const key = q.instrument_token || "";
-        const prev = q.prev_ohlc;
+    // Upstox V3 returns the instrument key as the OBJECT KEY in data.
+    // Do not use instrument_token here: it is not present in this response shape.
+    const allCandidates = Object.entries(quoteData)
+      .map(([key, q]) => {
+        const prev = q?.prev_ohlc;
         const meta = byKey.get(key);
         if (!meta || !prev) return null;
         const cpr = calculateCPR(prev);
