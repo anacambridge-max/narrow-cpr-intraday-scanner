@@ -13,8 +13,11 @@ type Instrument = {
   trading_symbol?: string;
 };
 
+type OHLC = { open: number; high: number; low: number; close: number; volume: number; ts?: number };
 type Quote = {
-  prev_ohlc?: { open: number; high: number; low: number; close: number; volume: number };
+  instrument_token?: string;
+  prev_ohlc?: OHLC;
+  live_ohlc?: OHLC;
 };
 
 const INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz";
@@ -120,22 +123,36 @@ export async function GET() {
     const universe = getFnoUniverse(instruments);
     if (!universe.length) throw new Error("No current NSE equity F&O underlyings found in Upstox instrument master.");
 
+    // CPR for the next session must use today's completed/current session OHLC.
+    // After the NSE close, live_ohlc represents today's session; during market hours it is the live partial session.
     const equityKeys = universe.map((x) => x.equityKey).slice(0, 500);
     const quote = await upstox(
       `/v3/market-quote/ohlc?interval=1d&instrument_key=${encodeURIComponent(equityKeys.join(","))}`,
     );
     const quoteData: Record<string, Quote> = quote.data || {};
-    const byKey = new Map(universe.map((x) => [x.equityKey, x]));
 
-    // Upstox V3 returns the instrument key as the OBJECT KEY in data.
-    // Do not use instrument_token here: it is not present in this response shape.
+    // Upstox returns objects keyed like NSE_EQ:NHPC while instrument_token carries NSE_EQ|<ISIN>.
+    // Prefer the token for exact mapping, but also keep a symbol map as a defensive fallback.
+    const byKey = new Map(universe.map((x) => [x.equityKey, x]));
+    const bySymbol = new Map(universe.map((x) => [x.symbol.toUpperCase(), x]));
+
     const allCandidates = Object.entries(quoteData)
-      .map(([key, q]) => {
-        const prev = q?.prev_ohlc;
-        const meta = byKey.get(key);
-        if (!meta || !prev) return null;
-        const cpr = calculateCPR(prev);
-        return { key, meta, prev, cpr };
+      .map(([responseKey, q]) => {
+        const tokenKey = q.instrument_token || "";
+        let meta = byKey.get(tokenKey);
+        if (!meta) {
+          const symbolFromResponse = responseKey.split(":").slice(1).join(":").toUpperCase();
+          meta = bySymbol.get(symbolFromResponse);
+        }
+        if (!meta) return null;
+
+        // For a next-session scan, use today's session candle. If live_ohlc is unavailable,
+        // fall back to prev_ohlc so the scanner still works on the next trading session.
+        const session = q.live_ohlc ?? q.prev_ohlc;
+        if (!session) return null;
+        const cpr = calculateCPR(session);
+        if (![cpr.pivot, cpr.bc, cpr.tc, cpr.widthPct].every(Number.isFinite)) return null;
+        return { key: meta.equityKey, meta, session, cpr };
       })
       .filter((x): x is NonNullable<typeof x> => Boolean(x && x.cpr.widthPct > 0));
 
@@ -161,7 +178,7 @@ export async function GET() {
 
     const inputs: ScannerInput[] = historical.map(({ candidate, candles }) => {
       const closes = candles.map((c) => c.close);
-      const last = candidate.prev.close;
+      const last = candidate.session.close;
       const trueRanges = candles.slice(1).map((c, i) => {
         const previousClose = candles[i].close;
         return Math.max(c.high - c.low, Math.abs(c.high - previousClose), Math.abs(c.low - previousClose));
@@ -174,16 +191,16 @@ export async function GET() {
       const avgVolume = priorVolumes.length
         ? priorVolumes.reduce((a, b) => a + b, 0) / priorVolumes.length
         : 0;
-      const relativeVolume = avgVolume ? candidate.prev.volume / avgVolume : 1;
+      const relativeVolume = avgVolume ? candidate.session.volume / avgVolume : 1;
 
       const ema20 = ema(closes.slice(-60), 20);
       const ema50 = ema(closes.slice(-100), 50);
       const trend = last > ema20 && ema20 > ema50 ? "Bullish" : last < ema20 && ema20 < ema50 ? "Bearish" : "Neutral";
-      const nearBreakout = last >= candidate.prev.high * 0.995 || last <= candidate.prev.low * 1.005;
+      const nearBreakout = last >= candidate.session.high * 0.995 || last <= candidate.session.low * 1.005;
 
       return {
         symbol: candidate.meta.symbol,
-        candle: { high: candidate.prev.high, low: candidate.prev.low, close: candidate.prev.close },
+        candle: { high: candidate.session.high, low: candidate.session.low, close: candidate.session.close },
         atrPct,
         relativeVolume,
         trend,
