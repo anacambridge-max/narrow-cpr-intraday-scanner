@@ -129,7 +129,7 @@ export async function GET() {
     const historical = await Promise.all(
       narrow.map(async (candidate) => {
         try {
-          const end = dateInIndia(-1);
+          const end = dateInIndia(0);
           const start = dateInIndia(-45);
           const data = await upstox(`/v3/historical-candle/${encodeURIComponent(candidate.key)}/days/1/${end}/${start}`);
           const candles = parseHistorical(data?.data?.candles || []);
@@ -147,9 +147,8 @@ export async function GET() {
         const previousClose = candles[i].close;
         return Math.max(c.high - c.low, Math.abs(c.high - previousClose), Math.abs(c.low - previousClose));
       });
-      const atr = trValues.slice(-14).length
-        ? trValues.slice(-14).reduce((a, b) => a + b, 0) / trValues.slice(-14).length
-        : 0;
+      const recentTR = trValues.slice(-14);
+      const atr = recentTR.length ? recentTR.reduce((a, b) => a + b, 0) / recentTR.length : 0;
       const atrPct = last ? (atr / last) * 100 : 0;
       const priorVolumes = candles.slice(-21, -1).map((c) => c.volume).filter((v) => v > 0);
       const relativeVolume = priorVolumes.length
@@ -170,25 +169,13 @@ export async function GET() {
     });
 
     const rows = rankScanner(inputs).slice(0, 20);
-    const details = rows.map((row) => {
-      const cpr = calculateCPR({ high: row.pivot + (row.tc - row.bc) / 2, low: row.pivot - (row.tc - row.bc) / 2, close: row.pivot });
-      return {
-        ...row,
-        cprWidthPct: row.cprWidthPct,
-        width: row.cprWidthPct,
-        score: row.score,
-        pdh: undefined,
-        pdl: undefined,
-        _cpr: cpr,
-      };
-    });
 
     return NextResponse.json({
       ok: true,
       asOf: new Date().toISOString(),
       universe: universe.length,
-      narrowCount: rows.length,
-      rows: details,
+      narrowCount: narrow.length,
+      rows,
       threshold: 0.7,
     });
   } catch (error) {
