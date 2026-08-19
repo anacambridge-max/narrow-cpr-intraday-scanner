@@ -22,12 +22,18 @@ const INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exch
 const UPSTOX_BASE = "https://api.upstox.com";
 
 function token() {
-  return process.env.UPSTOX_ACCESS_TOKEN || process.env.UPSTOX_ACCESS_TOKEN_V3 || "";
+  return (
+    process.env.UPSTOX_ACCESS_TOKEN ||
+    process.env.UPSTOX_ACCESS_TOKEN_V3 ||
+    process.env.UPSTOX_API_ACCESS_TOKEN ||
+    process.env.UPSTOX_TOKEN ||
+    ""
+  );
 }
 
 async function upstox(path: string) {
   const accessToken = token();
-  if (!accessToken) throw new Error("UPSTOX_ACCESS_TOKEN is not configured in Vercel.");
+  if (!accessToken) throw new Error("Upstox access token is not configured in Vercel.");
   const response = await fetch(`${UPSTOX_BASE}${path}`, {
     headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
@@ -41,8 +47,10 @@ async function loadInstruments(): Promise<Instrument[]> {
   const response = await fetch(INSTRUMENTS_URL, { cache: "no-store" });
   if (!response.ok) throw new Error(`Unable to load Upstox instrument master (${response.status}).`);
   const bytes = await response.arrayBuffer();
+  const compressedStream = new Response(bytes).body;
+  if (!compressedStream) throw new Error("Unable to read Upstox instrument master.");
   const ds = new DecompressionStream("gzip");
-  const decompressed = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).text();
+  const decompressed = await new Response(compressedStream.pipeThrough(ds)).text();
   const json = JSON.parse(decompressed);
   return Array.isArray(json) ? json : json.data ?? [];
 }
