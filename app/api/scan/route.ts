@@ -98,8 +98,7 @@ function rsi(values: number[], period = 14) {
     else losses -= change;
   }
   if (losses === 0) return 100;
-  const rs = gains / losses;
-  return 100 - 100 / (1 + rs);
+  return 100 - 100 / (1 + gains / losses);
 }
 
 function parseHistorical(candles: unknown[]) {
@@ -170,7 +169,8 @@ export async function GET() {
       const avgVolume = priorVolumes.length ? priorVolumes.reduce((a, b) => a + b, 0) / priorVolumes.length : 0;
       const relativeVolume = avgVolume ? candidate.session.volume / avgVolume : 1;
 
-      const avgRange = ranges.slice(-21).reduce((a, b) => a + b, 0) / Math.max(1, ranges.slice(-21).length);
+      const recentRanges = ranges.slice(-21);
+      const avgRange = recentRanges.reduce((a, b) => a + b, 0) / Math.max(1, recentRanges.length);
       const rangeExpansion = avgRange ? (candidate.session.high - candidate.session.low) / avgRange : 1;
       const closeLocation = candidate.session.high > candidate.session.low
         ? (last - candidate.session.low) / (candidate.session.high - candidate.session.low)
@@ -183,6 +183,7 @@ export async function GET() {
       const momentumRsi = rsi([...closes, last], 14);
       const turnoverCr = (last * candidate.session.volume) / 1e7;
 
+      // Keep the input strictly aligned with ScannerInput. Breakout confirmation is handled in the next-session/live layer.
       return {
         symbol: candidate.meta.symbol,
         candle: { high: candidate.session.high, low: candidate.session.low, close: candidate.session.close },
