@@ -30,6 +30,9 @@ button, input { font: inherit; }
 h1 { font-size: clamp(28px, 4vw, 48px); margin: 6px 0; line-height: 1; }
 .sub { color: var(--muted); margin: 0; }
 .pill { padding: 8px 12px; border: 1px solid var(--border); background: rgba(13,23,34,.8); border-radius: 999px; color: #c8d6e5; font-size: 13px; white-space: nowrap; }
+.refresh { padding: 8px 13px; border: 1px solid var(--border); background: #111e2b; color: #dbeafe; border-radius: 10px; cursor: pointer; }
+.refresh:hover:not(:disabled) { background: #17283a; }
+.refresh:disabled { opacity: .55; cursor: wait; }
 
 .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
 .card { background: rgba(13,23,34,.9); border: 1px solid var(--border); border-radius: 16px; padding: 16px; }
@@ -56,6 +59,8 @@ td { font-size: 14px; }
 .mono { font-variant-numeric: tabular-nums; }
 
 .empty { padding: 36px 20px; text-align: center; color: var(--muted); }
+.metrics { min-height: 24px; display: flex; flex-wrap: wrap; gap: 18px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.metrics strong { color: var(--text); }
 .footer { margin-top: 14px; color: var(--muted); font-size: 12px; }
 
 @media (max-width: 900px) {
