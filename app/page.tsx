@@ -18,11 +18,17 @@ type ScannerRow = {
   close: number;
 };
 
+type DiagnosticWidth = { symbol: string; width: number };
+
 type ScanResponse = {
   ok: boolean;
   asOf?: string;
   universe?: number;
+  quoteCount?: number;
+  validCprCount?: number;
   narrowCount?: number;
+  minCprWidth?: number | null;
+  diagnosticWidths?: DiagnosticWidth[];
   rows?: ScannerRow[];
   threshold?: number;
   error?: string;
@@ -108,7 +114,23 @@ export default function Home() {
           ) : loading ? (
             <div className="empty">Scanning the current F&O universe with Upstox…</div>
           ) : rows.length === 0 ? (
-            <div className="empty">No stocks currently meet the narrow CPR threshold.</div>
+            <div className="empty">
+              <strong>No stocks currently meet the narrow CPR threshold.</strong>
+              <div className="diagnostic-grid">
+                <span>F&O universe <b>{data?.universe ?? 0}</b></span>
+                <span>Quotes received <b>{data?.quoteCount ?? 0}</b></span>
+                <span>Valid CPR <b>{data?.validCprCount ?? 0}</b></span>
+                <span>Minimum CPR <b>{data?.minCprWidth != null ? `${data.minCprWidth.toFixed(3)}%` : "—"}</b></span>
+              </div>
+              {!!data?.diagnosticWidths?.length && (
+                <div className="diagnostic-list">
+                  <div className="diagnostic-title">10 narrowest CPRs received</div>
+                  {data.diagnosticWidths.map((item) => (
+                    <span key={item.symbol}>{item.symbol} <b>{item.width.toFixed(3)}%</b></span>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="table-wrap">
               <table>
